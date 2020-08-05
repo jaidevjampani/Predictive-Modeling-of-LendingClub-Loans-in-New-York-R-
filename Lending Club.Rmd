@@ -1,0 +1,644 @@
+---
+title: "R Notebook"
+output:
+  word_document: default
+  pdf_document:
+    latex_engine: xelatex
+  html_notebook: default
+always_allow_html: yes
+---
+
+```{r setup, include=FALSE}
+
+# This chunk shows/hides the code in your final report. When echo = TRUE, the code
+# is shown in the report. When echo = FALSE, the code is hidden from the final report.
+# We would like to see your code, so please leave the setting as is during the course.
+# This chunk will not show up in your reports, so you can safely ignore its existence.
+
+##knitr::opts_chunk$set(echo = TRUE)
+
+```
+
+
+The following is your first chunk to start with. Remember, you can add chunks using the menu
+above (Insert -> R) or using the keyboard shortcut Ctrl+Alt+I. A good practice is to use
+different code chunks to answer different questions. You can delete this comment if you like.
+
+Other useful keyboard shortcuts include Alt- for the assignment operator, and Ctrl+Shift+M
+for the pipe operator. You can delete these reminders if you don't want them in your report.
+
+
+```{r}
+setwd("C:/") #Don't forget to set your working directory before you start!
+
+library("tidyverse")
+library("tidymodels")
+library("plotly")
+library("skimr")
+library("lubridate")
+library("fpp3")
+library("tsibble")
+library('feasts')
+library("fpp2")
+library("na.tools")
+library("anomalize")
+```
+
+
+Part 1 - Predicting/forecasting the LendingClub loans
+
+
+```{r}
+df = file.choose()
+```
+
+
+
+```{r}
+tslCOrg <- read.csv(df)
+
+```
+
+
+```{r}
+skim(tslCOrg)
+```
+
+
+
+
+```{r}
+tslCOrg <- tslCOrg %>% 
+  mutate(date=as.character(date),state = as.character(state))
+
+```
+
+
+
+
+```{r}
+tslCOrg <- tslCOrg %>% 
+  mutate(date = yearmonth(date)) %>% 
+  as_tsibble(index = date , key = state)
+
+```
+
+
+```{r}
+df1 = file.choose()
+```
+
+```{r}
+dfnye <- read.csv(df1)
+
+```
+
+```{r}
+dfnye <- dfnye %>% 
+  mutate(date = as.character(date),state = as.character(state))
+```
+
+
+
+
+```{r}
+dfnye <- dfnye %>% 
+  mutate(date = yearmonth(date))
+
+```
+
+
+
+
+```{r}
+df2 = file.choose()
+```
+
+```{r}
+dfc <- read.csv(df2)
+
+```
+
+```{r}
+dfstate <- data.frame(state = state.abb,NAME = state.name)
+
+```
+
+
+
+
+```{r}
+dfc <- merge(x = dfc,  y = dfstate, by="NAME",all.x=TRUE)
+
+```
+
+
+```{r}
+dfc <- dfc %>% 
+  mutate(state = as.character(state))
+
+```
+
+
+
+```{r}
+tslCOrg <- merge(x=tslCOrg,y=dfc, by="state",all.x=TRUE)
+
+```
+
+```{r}
+tslCOrg %<>% 
+  rowwise() %>% 
+  mutate(loansPerCapita = totalLoans/CENSUS2010POP)
+
+```
+
+
+```{r}
+tslc <- merge(x = tslCOrg,y = dfnye,by = c("state","date"),all.x = TRUE)
+
+  
+```
+
+
+
+
+```{r}
+tslc <- tslc %>% 
+  as_tsibble(index = date, key = state)
+
+```
+
+
+```{r}
+dfc[order(-dfc$CENSUS2010POP),]
+```
+
+
+
+
+
+```{r}
+tslc %>% 
+  filter(state == c("CA","TX","NY","FL","IL")) %>% 
+    autoplot(loansPerCapita)
+```
+
+
+
+```{r}
+tslc %>% 
+  filter(state == c("SD","AK","ND","VT","WY")) %>% 
+    autoplot(loansPerCapita)
+```
+
+
+
+```{r}
+anoMA <- tslc %>% 
+  filter(state == "MA")
+anoMA <- as_tsibble(anoMA, key = state, index = date)
+
+anoCO <- tslc %>% 
+  filter(state == "CO")
+anoCO <- as_tsibble(anoCO, key = state, index = date)
+
+anoNY <- tslc %>% 
+  filter(state == "NY")
+anoNY <- as_tsibble(anoNY, key = state, index = date)
+```
+
+```{r}
+anoMA <- anoMA %>% 
+  mutate(date = as.Date(date))
+
+```
+
+
+```{r}
+anoCO <- anoCO %>% 
+  mutate(date = as.Date(date))
+
+```
+
+
+```{r}
+anoNY <- anoNY %>% 
+  mutate(date = as.Date(date))
+
+```
+
+
+
+```{r}
+anomalyMA <- 
+  anoMA %>% 
+  time_decompose(loansPerCapita, method = "stl") %>% 
+  anomalize(remainder, method = "iqr") %>% 
+  plot_anomaly_decomposition() +
+  labs(title = "Anomaly Detection for the MA data")+
+  xlab("date") + ylab("Loans Per Capita")+
+  scale_x_date(date_breaks = "years", date_labels = "%y")
+anomalyMA
+```
+
+
+
+
+```{r}
+anomalyCO <- 
+  anoCO %>% 
+  time_decompose(loansPerCapita, method = "stl") %>% 
+  anomalize(remainder, method = "iqr") %>% 
+  plot_anomaly_decomposition() +
+  labs(title = "Anomaly Detection for the CO data")+
+  xlab("date") + ylab("Loans Per Capita")+
+  scale_x_date(date_breaks = "years", date_labels = "%y")
+anomalyCO
+```
+
+
+```{r}
+anomalyNY <- 
+  anoNY %>% 
+  time_decompose(loansPerCapita, method = "stl") %>% 
+  anomalize(remainder, method = "iqr") %>% 
+  plot_anomaly_decomposition() +
+  labs(title = "Anomaly Detection for the NY data")+
+  xlab("date") + ylab("Loans Per Capita")+
+  scale_x_date(date_breaks = "years", date_labels = "%y")
+anomalyNY
+```
+
+
+
+```{r}
+tslc %>% 
+  filter(state == "NY") %>% 
+   model(STL(loansPerCapita~ season(window='periodic'),robust = TRUE)) %>% 
+      components() %>% 
+       autoplot()
+```
+
+
+```{r}
+tslc %>% 
+  filter(state == 'NY') %>% 
+  gg_season(loansPerCapita)
+```
+
+
+
+
+
+```{r}
+tslc %>% 
+  filter(state == 'NY') %>% 
+  gg_subseries(loansPerCapita)
+```
+
+
+
+```{r}
+tslc %>% 
+  filter(state=="NY") %>% 
+    ACF(loansPerCapita) %>% 
+          autoplot()
+  
+```
+
+
+```{r}
+tslc %>% 
+  filter(state=="NY") %>% 
+    PACF(loansPerCapita) %>% 
+          autoplot()
+```
+
+
+```{r}
+tslc %>% 
+  filter(state=="NY") %>% 
+    gg_lag(loansPerCapita, lags = c(1,5,10,15,20,25)  ,geom = "point")
+```
+
+
+```{r}
+nyc_ma <- tslc %>% 
+  filter(state == "NY") %>% 
+    mutate('5-MA' = slide_dbl(loansPerCapita, mean, .size = 5, .align = "center"))
+```
+
+
+
+
+```{r}
+nyc_ma %>% 
+  autoplot(nyc_ma$loansPerCapita) +
+    autolayer(nyc_ma, nyc_ma$`5-MA`, color = 'red')
+```
+
+
+
+
+```{r}
+loan_fit <- tslc %>% 
+    filter(state == 'NY') %>% 
+      model(seasonalNaive = SNAIVE(loansPerCapita), DRIFT = NAIVE(loansPerCapita~drift()))
+
+  
+```
+
+```{r}
+loan_fc <-  loan_fit %>% 
+  forecast(h=60)
+
+
+```
+
+
+
+
+
+```{r}
+loan_fc %>% 
+  autoplot(tslc %>% filter(state == "NY"))
+```
+
+
+```{r}
+tslc_ny <- tslc %>% 
+  filter(state == "NY")
+
+```
+
+
+
+
+
+
+```{r}
+fit_loans <- tslc_ny %>% 
+  model(TSLM(loansPerCapita ~ avgTerm+ avgIntRate+ avgGrade+ avgEmpLength+ avgAnnualInc+ avgVerifStatus+ avgHomeOwner + avgRevolBal + countOfLoans + NYCPI + NYUnemployment + NYCondoPriceIdx + NYSnapBenefits + trend() + season()))
+report(fit_loans)
+```
+
+
+
+
+
+```{r}
+fitfitted <- 
+  augment(fit_loans) %>%
+    ggplot(aes(x=date))+
+    geom_line(aes(y= loansPerCapita, color = "Data"))+
+    geom_line(aes(y=.fitted, color = "Fitted"))
+plot(fitfitted)
+```
+
+
+
+```{r}
+fit_loans1 <- tslc_ny %>% 
+  model(TSLM(loansPerCapita ~ avgTerm+ avgIntRate+ avgGrade+ avgEmpLength+ avgAnnualInc+ avgVerifStatus+ avgHomeOwner + avgRevolBal + countOfLoans + NYCPI + NYUnemployment + NYCondoPriceIdx + NYSnapBenefits ))
+report(fit_loans1)
+```
+
+```{r}
+fitfitted1 <- 
+  augment(fit_loans1) %>%
+    ggplot(aes(x=date))+
+    geom_line(aes(y= loansPerCapita, color = "Data"))+
+    geom_line(aes(y=.fitted, color = "Fitted"))
+plot(fitfitted1)
+```
+
+
+
+```{r}
+train1 <- tslc_ny %>% filter_index("2007 Jun" ~ "2014 Dec")
+test1 <-  tslc_ny %>% filter_index("2015 Jan" ~ "2017 Mar")
+
+```
+
+
+
+
+
+```{r}
+loan_fit <- train1 %>%
+  model(TSLM(loansPerCapita ~ avgTerm+ avgIntRate+ avgGrade+ avgEmpLength+ avgAnnualInc+ avgVerifStatus+ avgHomeOwner + avgRevolBal + countOfLoans + NYCPI + NYUnemployment + NYCondoPriceIdx + NYSnapBenefits + trend() + season()))
+
+```
+
+```{r}
+loans_fc <- loan_fit %>% 
+  forecast(test1)
+loans_fc
+```
+
+```{r}
+train1 %>%
+ggplot() +
+geom_line(aes(x = date, y = loansPerCapita, colour = "Train")) + geom_line(aes(x = date, y = loansPerCapita, colour = "Predict"), data = loans_fc) + geom_line(aes(x = date, y = loansPerCapita, colour = "Test"), data = test1) +
+xlab("Date") + ylab("Loans Per Capita") +
+ggtitle("Lending Club Predictive Plot 1") +
+guides(colour=guide_legend(title=NULL))
+```
+
+
+
+
+
+
+```{r}
+train2 <- tslc_ny %>% filter_index("2007 Jun" ~ "2015 Dec")
+test2 <-  tslc_ny %>% filter_index("2016 Jan" ~ "2017 Mar")
+
+```
+
+
+
+
+
+```{r}
+
+loan_fit1 <- train2 %>%
+  model(TSLM(loansPerCapita ~ avgTerm+ avgIntRate+ avgGrade+ avgEmpLength+ avgAnnualInc+ avgVerifStatus+ avgHomeOwner + avgRevolBal + countOfLoans + NYCPI + NYUnemployment + NYCondoPriceIdx + NYSnapBenefits + trend() + season()))
+
+```
+
+```{r}
+
+loans_fc1 <- loan_fit1 %>% 
+  forecast(test2)
+
+```
+
+
+
+
+```{r}
+train2 %>%
+ggplot() +
+geom_line(aes(x = date, y = loansPerCapita, colour = "Train")) + geom_line(aes(x = date, y = loansPerCapita, colour = "Predict"), data = loans_fc1) + geom_line(aes(x = date, y = loansPerCapita, colour = "Test"), data = test2) +
+xlab("Date") + ylab("Loans Per Capita") +
+ggtitle("Lending Club Predictive Plot 2") +
+guides(colour=guide_legend(title=NULL))
+```
+
+
+
+
+```{r}
+fit_loans %>% 
+  gg_tsresiduals()
+```
+
+
+```{r}
+fit_arima <- tslc_ny %>% 
+  model(ARIMA(loansPerCapita ~ avgTerm+ avgIntRate+ avgGrade+ avgEmpLength+ avgAnnualInc+ avgVerifStatus+ avgHomeOwner + avgRevolBal + countOfLoans + NYCPI + NYUnemployment + NYCondoPriceIdx + NYSnapBenefits, stepwise = FALSE, approximation = FALSE))
+report(fit_arima)
+  
+```
+
+
+```{r}
+fit_arima1 <- tslc_ny %>% 
+  model(ARIMA(loansPerCapita ~ avgTerm+ avgIntRate+ avgGrade+ avgEmpLength+ avgAnnualInc+ avgVerifStatus+ avgHomeOwner + avgRevolBal + countOfLoans + NYCPI + NYUnemployment + NYCondoPriceIdx + NYSnapBenefits))
+report(fit_arima1)
+```
+
+
+#p-Values
+
+```{r}
+avgTerm <- 2*pt(-abs(0.0025/0.0017),nrow(tslc_ny)-18)
+avgIntRate <- 2*pt(-abs(-0.0148/0.0077),nrow(tslc_ny)-18)
+avgGrade <- 2*pt(-abs(0.0217/0.0167),nrow(tslc_ny)-18)
+avgEmpLength <- 2*pt(-abs(0.0005/0.0064),nrow(tslc_ny)-18)
+avgVerifStatus <- 2*pt(-abs(0.0131/0.0218),nrow(tslc_ny)-18)
+avgHomeOwner <- 2*pt(-abs(-0.0280/0.0555),nrow(tslc_ny)-18)
+NYCPI <- 2*pt(-abs(-0.0013/0.0005),nrow(tslc_ny)-18)
+NYUnemployement <- 2*pt(-abs(0.00199/0.0105),nrow(tslc_ny)-18)
+NYCondoPriceIdx <- 2*pt(-abs(0.003/0.001),nrow(tslc_ny)-18)
+```
+
+```{r}
+avgTerm
+avgIntRate
+avgGrade
+avgEmpLength
+avgVerifStatus
+avgHomeOwner
+NYCPI
+NYUnemployement
+NYCondoPriceIdx
+```
+
+
+
+
+```{r}
+tslc_ny %>% 
+  features(loansPerCapita, unitroot_ndiffs)
+```
+
+
+
+
+```{r}
+fit_arima1 <- tslc_ny %>% 
+  model(ARIMA(loansPerCapita ~ avgTerm+ avgIntRate+ avgGrade+ avgEmpLength+ avgAnnualInc+ avgVerifStatus+ avgHomeOwner + avgRevolBal + countOfLoans + NYCPI + NYUnemployment + NYCondoPriceIdx + NYSnapBenefits+ pdq(2:6,1,0:3) ,stepwise = FALSE, approximation = FALSE))
+report(fit_arima1)
+  
+```
+
+
+
+```{r}
+set.seed(333)
+dfTrain1 <- tslc_ny %>% filter_index("2007 Jun" ~ "2016 Feb")
+dfTest1 <- tslc_ny %>% filter_index("2016 Mar"~"2017 Mar")
+  
+```
+
+
+
+
+
+```{r}
+test_fit <- dfTrain1 %>% 
+  model(TS1 = TSLM(loansPerCapita ~ trend() + season() ),TS2 = TSLM(loansPerCapita ~ avgTerm+ avgIntRate+ avgGrade+ avgEmpLength+ avgAnnualInc+ avgVerifStatus+ avgHomeOwner + avgRevolBal + countOfLoans + NYCPI + NYUnemployment + NYCondoPriceIdx + NYSnapBenefits + trend() + season()), ARIMA1 = ARIMA(loansPerCapita), ARIMA2 = ARIMA(loansPerCapita ~ avgTerm+ avgIntRate+ avgGrade+ avgEmpLength+ avgAnnualInc+ avgVerifStatus+ avgHomeOwner + avgRevolBal + countOfLoans + NYCPI + NYUnemployment + NYCondoPriceIdx + NYSnapBenefits + pdq(4,0,0) + PDQ(1,0,0) ) )
+
+
+```
+
+```{r}
+glance(test_fit)
+```
+
+
+```{r}
+test_fc <- test_fit %>% 
+  forecast(dfTest1)
+```
+
+
+
+
+
+```{r}
+accuracy(test_fc, dfTest1)
+```
+
+
+
+
+```{r}
+set.seed(333)
+dfTrain2 <- tslc_ny %>% filter_index("2007 Jun" ~ "2016 Mar")
+dfTest2<- tslc_ny %>% filter_index("2016 Apr"~"2017 Mar")
+```
+
+
+
+
+```{r}
+test_fit1 <- dfTrain2 %>% 
+  model(TS1 = TSLM(loansPerCapita ~ trend() + season() ),TS2 = TSLM(loansPerCapita ~ avgTerm+ avgIntRate+ avgGrade+ avgEmpLength+ avgAnnualInc+ avgVerifStatus+ avgHomeOwner + avgRevolBal + countOfLoans + NYCPI + NYUnemployment + NYCondoPriceIdx + NYSnapBenefits + trend() + season()), ARIMA1 = ARIMA(loansPerCapita), ARIMA2 = ARIMA(loansPerCapita ~ avgTerm+ avgIntRate+ avgGrade+ avgEmpLength+ avgAnnualInc+ avgVerifStatus+ avgHomeOwner + avgRevolBal + countOfLoans + NYCPI + NYUnemployment + NYCondoPriceIdx + NYSnapBenefits + pdq(4,0,0) + PDQ(1,0,0) ) )
+```
+
+```{r}
+test_fc1 <- test_fit1 %>% 
+  forecast(dfTest2)
+```
+
+
+
+
+
+```{r}
+accuracy(test_fc1, dfTest2)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
