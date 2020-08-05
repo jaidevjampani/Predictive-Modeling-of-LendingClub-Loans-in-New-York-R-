@@ -5,3 +5,5 @@
 •      Forecasted total dollar value of loans per capita using time series regression and ARIMA models to help increase the market share
 
 •      Analyzed the changes in trend and seasonality in the data and effects of features like interest rate, credit balance, unemployment rate
+
+Packages used: dplyr, tidyverse, ggplot2, fpp3, tsibble
